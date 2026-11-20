@@ -5,8 +5,18 @@ import numpy as np
 import torch
 from torch.utils.data import IterableDataset
 
-from tfsformer.configuration import MASK_MODES, DatasetMode, TFSpecFormerForecastingConfig, TFSpecFormerTrainingConfig
-from tfsformer.utils import as_series, left_pad_and_cat, min_visible_patches, sample_patch_mask
+from tfsformer.configuration import (
+    MASK_MODES,
+    DatasetMode,
+    TFSpecFormerForecastingConfig,
+    TFSpecFormerTrainingConfig,
+)
+from tfsformer.utils import (
+    as_series,
+    left_pad_and_cat,
+    min_visible_patches,
+    sample_patch_mask,
+)
 
 
 def list_data_dirs(path: str) -> list[str]:
@@ -18,7 +28,11 @@ def list_data_dirs(path: str) -> list[str]:
         os.path.join(path, "dataset_dict.json")
     ):
         return [path]
-    return [os.path.join(path, name) for name in sorted(os.listdir(path)) if os.path.isdir(os.path.join(path, name))]
+    return [
+        os.path.join(path, name)
+        for name in sorted(os.listdir(path))
+        if os.path.isdir(os.path.join(path, name))
+    ]
 
 
 def load_spectrum_dataset(path: str):
@@ -62,7 +76,11 @@ class TFSpecFormerDataset(IterableDataset):
         self.forced_mode = forced_mode
         self.rng = np.random.default_rng(seed)
         self.patch_size = forecasting_config.input_patch_size
-        self.batch_size = training_config.batch_size if self.mode == DatasetMode.TRAIN else training_config.test_batch_size
+        self.batch_size = (
+            training_config.batch_size
+            if self.mode == DatasetMode.TRAIN
+            else training_config.test_batch_size
+        )
 
     def __iter__(self) -> Iterator[dict[str, torch.Tensor]]:
         if self.mode == DatasetMode.TRAIN:
@@ -87,7 +105,9 @@ class TFSpecFormerDataset(IterableDataset):
         weights = weights / weights.sum()
         return str(self.rng.choice(keys, p=weights))
 
-    def _sample_window(self, series: torch.Tensor, mode: str) -> tuple[torch.Tensor, torch.Tensor] | None:
+    def _sample_window(
+        self, series: torch.Tensor, mode: str
+    ) -> tuple[torch.Tensor, torch.Tensor] | None:
         channels, length = series.shape
         patch = self.patch_size
         min_past = self.forecasting.min_past
@@ -95,16 +115,23 @@ class TFSpecFormerDataset(IterableDataset):
 
         if mode == "future":
             if self.mode == DatasetMode.TRAIN:
-                n_out = int(self.rng.integers(1, self.forecasting.max_output_patches + 1))
+                n_out = int(
+                    self.rng.integers(1, self.forecasting.max_output_patches + 1)
+                )
             else:
-                n_out = min(self.training.eval_output_patches, self.forecasting.max_output_patches)
+                n_out = min(
+                    self.training.eval_output_patches,
+                    self.forecasting.max_output_patches,
+                )
             horizon = n_out * patch
             if length < min_past + horizon:
                 n_out = (length - min_past) // patch
                 if n_out < 1:
                     return None
                 horizon = n_out * patch
-            hist_len = (min(self.forecasting.context_length, length - horizon) // patch) * patch
+            hist_len = (
+                min(self.forecasting.context_length, length - horizon) // patch
+            ) * patch
             if hist_len < min_past:
                 return None
             total = hist_len + horizon
@@ -164,7 +191,9 @@ class TFSpecFormerDataset(IterableDataset):
             "group_ids": torch.cat(groups, dim=0),
         }
 
-    def _append_group(self, buckets, series: torch.Tensor, mode: str, group_id: int) -> bool:
+    def _append_group(
+        self, buckets, series: torch.Tensor, mode: str, group_id: int
+    ) -> bool:
         sampled = self._sample_window(series, mode)
         if sampled is None:
             return False
@@ -184,7 +213,9 @@ class TFSpecFormerDataset(IterableDataset):
         while rows < self.batch_size and failures < 64:
             series = self._series_at(int(self.rng.integers(0, len(self.inputs))))
             before = len(values)
-            if not self._append_group((values, masks, groups), series, self._choose_mode(), group_id):
+            if not self._append_group(
+                (values, masks, groups), series, self._choose_mode(), group_id
+            ):
                 failures += 1
                 continue
             added = values[-1].shape[0]
@@ -198,7 +229,9 @@ class TFSpecFormerDataset(IterableDataset):
             group_id += 1
             failures = 0
         if not values:
-            raise RuntimeError("Could not build a batch. Series are shorter than min_past plus one masked patch.")
+            raise RuntimeError(
+                "Could not build a batch. Series are shorter than min_past plus one masked patch."
+            )
         return self._pack(values, masks, groups)
 
     def _iter_ordered(self) -> Iterator[dict[str, torch.Tensor]]:
@@ -211,7 +244,9 @@ class TFSpecFormerDataset(IterableDataset):
                 yield self._pack(values, masks, groups)
                 values, masks, groups = [], [], []
                 rows = 0
-            if not self._append_group((values, masks, groups), series, "future", group_id):
+            if not self._append_group(
+                (values, masks, groups), series, "future", group_id
+            ):
                 continue
             rows += values[-1].shape[0]
             group_id += 1

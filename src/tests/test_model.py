@@ -54,15 +54,21 @@ class ModelTest(unittest.TestCase):
         baseline = self.model._compute_loss(pred, target, mask)
         visible = target.clone()
         visible[:, :5] += 10
-        self.assertTrue(torch.equal(baseline, self.model._compute_loss(pred, visible, mask)))
+        self.assertTrue(
+            torch.equal(baseline, self.model._compute_loss(pred, visible, mask))
+        )
         hidden = target.clone()
         hidden[:, -1] += 4
-        self.assertFalse(torch.allclose(baseline, self.model._compute_loss(pred, hidden, mask)))
+        self.assertFalse(
+            torch.allclose(baseline, self.model._compute_loss(pred, hidden, mask))
+        )
 
     def test_left_padded_groups_stay_finite(self):
         long = torch.randn(2, 16)
         short = torch.randn(2, 8)
-        values = torch.cat((long, torch.cat((torch.full((2, 8), float("nan")), short), dim=-1)), dim=0)
+        values = torch.cat(
+            (long, torch.cat((torch.full((2, 8), float("nan")), short), dim=-1)), dim=0
+        )
         input_mask = torch.ones(4, 16)
         input_mask[:, -4:] = 0
         input_mask[2:, :8] = 0
@@ -72,7 +78,9 @@ class ModelTest(unittest.TestCase):
 
     def test_forecast_returns_the_requested_horizon(self):
         context = torch.randn(2, 30)
-        prediction = self.model.forecast(context, prediction_length=6, group_ids=torch.tensor([0, 0]))
+        prediction = self.model.forecast(
+            context, prediction_length=6, group_ids=torch.tensor([0, 0])
+        )
         self.assertEqual(tuple(prediction.shape), (2, 3, 6))
         self.assertTrue(torch.isfinite(prediction).all())
         with self.assertRaises(ValueError):

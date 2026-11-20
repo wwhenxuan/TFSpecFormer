@@ -8,7 +8,11 @@ from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from tfsformer.configuration import DatasetMode, TFSpecFormerConfig, TFSpecFormerTrainingConfig
+from tfsformer.configuration import (
+    DatasetMode,
+    TFSpecFormerConfig,
+    TFSpecFormerTrainingConfig,
+)
 from tfsformer.dataset import TFSpecFormerDataset, list_data_dirs, load_spectrum_dataset
 from tfsformer.modeling import TFSpecFormerModel
 from tfsformer.utils import count_parameters, plot_forecast_grid
@@ -58,7 +62,9 @@ class TFSpecFormerPreTrainer(object):
         if self.accelerator.num_processes > 1:
             broadcast_object_list(holder, from_process=0)
         self.run_name = f"tfsformer-{holder[0]}"
-        self.checkpoint_dir = os.path.join(self.training_config.checkpoint_path, self.run_name)
+        self.checkpoint_dir = os.path.join(
+            self.training_config.checkpoint_path, self.run_name
+        )
         if self.accelerator.is_main_process:
             os.makedirs(self.checkpoint_dir, exist_ok=True)
         self.accelerator.wait_for_everyone()
@@ -105,7 +111,9 @@ class TFSpecFormerPreTrainer(object):
         return data_path
 
     def _build_loaders(self):
-        train_inputs = self._resolve_inputs(self.training_config.data_path, self.train_inputs)
+        train_inputs = self._resolve_inputs(
+            self.training_config.data_path, self.train_inputs
+        )
         if self.eval_inputs is not None:
             eval_inputs = self.eval_inputs
         elif self.train_inputs is not None:
@@ -127,19 +135,32 @@ class TFSpecFormerPreTrainer(object):
             seed=10_000 + self.accelerator.process_index,
         )
         workers = self.training_config.num_workers
-        train_loader = DataLoader(train_dataset, batch_size=1, collate_fn=identity_collate, num_workers=workers)
-        eval_loader = DataLoader(eval_dataset, batch_size=1, collate_fn=identity_collate, num_workers=0)
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=1,
+            collate_fn=identity_collate,
+            num_workers=workers,
+        )
+        eval_loader = DataLoader(
+            eval_dataset, batch_size=1, collate_fn=identity_collate, num_workers=0
+        )
         return train_loader, eval_loader
 
     def _setup_logging(self) -> None:
-        if self.training_config.report_to != "swanlab" or not self.accelerator.is_main_process:
+        if (
+            self.training_config.report_to != "swanlab"
+            or not self.accelerator.is_main_process
+        ):
             return
         import swanlab
 
         swanlab.init(
             project=self.training_config.swanlab_project,
             experiment_name=self.run_name,
-            config={"model": self.model_config.to_dict(), "training": self.training_config.to_dict()},
+            config={
+                "model": self.model_config.to_dict(),
+                "training": self.training_config.to_dict(),
+            },
             mode=self.training_config.swanlab_mode,
         )
         self._swanlab = swanlab
@@ -156,7 +177,9 @@ class TFSpecFormerPreTrainer(object):
             os.path.join(path, "pretrained", "model.safetensors"),
             os.path.join(path, "model.safetensors"),
         ]
-        weight_path = next(candidate for candidate in candidates if os.path.isfile(candidate))
+        weight_path = next(
+            candidate for candidate in candidates if os.path.isfile(candidate)
+        )
         self.model.load_state_dict(load_file(weight_path), strict=False)
         self.accelerator.print(f"Loaded weights from {weight_path}")
 
@@ -164,7 +187,9 @@ class TFSpecFormerPreTrainer(object):
         self.model.train()
         with self.accelerator.accumulate(self.model):
             self.optimizer.zero_grad(set_to_none=True)
-            outputs = self.model(batch["values"], batch["input_mask"], batch["group_ids"])
+            outputs = self.model(
+                batch["values"], batch["input_mask"], batch["group_ids"]
+            )
             if outputs.loss is None:
                 raise RuntimeError("Training batch has no masked targets to supervise.")
             self.accelerator.backward(outputs.loss)
@@ -182,7 +207,9 @@ class TFSpecFormerPreTrainer(object):
         for index, batch in enumerate(self.eval_loader):
             if index >= MAX_EVAL_BATCHES:
                 break
-            outputs = self.model(batch["values"], batch["input_mask"], batch["group_ids"])
+            outputs = self.model(
+                batch["values"], batch["input_mask"], batch["group_ids"]
+            )
             if outputs.loss is None:
                 continue
             total = total + outputs.loss.detach()
@@ -206,7 +233,9 @@ class TFSpecFormerPreTrainer(object):
             hidden = (mask[index] <= 0) & observed
             if not hidden.any():
                 continue
-            rows.append((values[index, visible], values[index, hidden], preds[index][:, hidden]))
+            rows.append(
+                (values[index, visible], values[index, hidden], preds[index][:, hidden])
+            )
         if not rows:
             return None
         figure = plot_forecast_grid(rows, quantiles=self.forecasting.quantiles)
@@ -218,7 +247,9 @@ class TFSpecFormerPreTrainer(object):
         return path
 
     def save_checkpoint(self, step: int, train_loss: float, eval_loss: float) -> None:
-        folder = os.path.join(self.checkpoint_dir, f"checkpoint-{step}-{train_loss:.5f}-{eval_loss:.5f}")
+        folder = os.path.join(
+            self.checkpoint_dir, f"checkpoint-{step}-{train_loss:.5f}-{eval_loss:.5f}"
+        )
         os.makedirs(folder, exist_ok=True)
         self.accelerator.wait_for_everyone()
         self.accelerator.save_state(folder, safe_serialization=True)
@@ -233,8 +264,10 @@ class TFSpecFormerPreTrainer(object):
             self._load_model_weights(self.resume_from_checkpoint)
 
         train_loader, eval_loader = self._build_loaders()
-        self.model, self.optimizer, self.scheduler, train_loader, eval_loader = self.accelerator.prepare(
-            self.model, self.optimizer, self.scheduler, train_loader, eval_loader
+        self.model, self.optimizer, self.scheduler, train_loader, eval_loader = (
+            self.accelerator.prepare(
+                self.model, self.optimizer, self.scheduler, train_loader, eval_loader
+            )
         )
         self.train_loader = train_loader
         self.eval_loader = eval_loader
@@ -243,14 +276,21 @@ class TFSpecFormerPreTrainer(object):
 
         self._setup_logging()
         train_iter = iter(self.train_loader)
-        progress = tqdm(range(1, self.num_training_steps + 1), disable=not self.accelerator.is_main_process)
+        progress = tqdm(
+            range(1, self.num_training_steps + 1),
+            disable=not self.accelerator.is_main_process,
+        )
         for step in progress:
             loss = self._train_step(next(train_iter))
             loss_value = self.accelerator.gather(loss).mean().item()
             learning_rate = self.scheduler.get_last_lr()[0]
             if self.accelerator.is_main_process:
-                progress.set_postfix(loss=f"{loss_value:.4f}", lr=f"{learning_rate:.2e}")
-            self._log(step, {"train/loss": loss_value, "train/learning_rate": learning_rate})
+                progress.set_postfix(
+                    loss=f"{loss_value:.4f}", lr=f"{learning_rate:.2e}"
+                )
+            self._log(
+                step, {"train/loss": loss_value, "train/learning_rate": learning_rate}
+            )
 
             if step % self.num_test_steps == 0 or step == self.num_training_steps:
                 eval_loss, preview = self._eval_step()

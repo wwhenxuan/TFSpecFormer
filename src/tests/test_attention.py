@@ -25,11 +25,15 @@ class MemoryAttentionTest(unittest.TestCase):
         self.assertNotIn("flash_attn", source)
         self.assertNotIn("import fla", source)
         self.assertNotIn("past_key_values", source)
-        self.assertNotIn("input_ids", inspect.signature(MemoryAttention.forward).parameters)
+        self.assertNotIn(
+            "input_ids", inspect.signature(MemoryAttention.forward).parameters
+        )
 
     def test_shared_memory_is_broadcast_and_used(self):
         module = MemoryAttention(self.config, use_rope=True).eval()
-        self.assertEqual(tuple(module.memory.shape), (self.config.num_heads, self.config.d_kv))
+        self.assertEqual(
+            tuple(module.memory.shape), (self.config.num_heads, self.config.d_kv)
+        )
         first = module(self.hidden, self.mask, self.positions).hidden_states
         with torch.no_grad():
             module.memory.add_(1.0)
@@ -40,7 +44,9 @@ class MemoryAttentionTest(unittest.TestCase):
         module = MemoryAttention(self.config, use_rope=False).eval()
         first = module(self.hidden, self.mask).hidden_states
         head_dim = self.config.d_kv
-        gate_rows = [(head + 1) * (head_dim + 1) - 1 for head in range(self.config.num_heads)]
+        gate_rows = [
+            (head + 1) * (head_dim + 1) - 1 for head in range(self.config.num_heads)
+        ]
         with torch.no_grad():
             module.q.weight[gate_rows] *= 10
         second = module(self.hidden, self.mask).hidden_states

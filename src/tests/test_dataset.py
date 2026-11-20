@@ -137,7 +137,9 @@ class DatasetMaskTest(unittest.TestCase):
         self.assertTrue(torch.any(group["input_mask"][0] == 0))
 
         staggered = self._batch("staggered")
-        self.assertFalse(torch.equal(staggered["input_mask"][0], staggered["input_mask"][1]))
+        self.assertFalse(
+            torch.equal(staggered["input_mask"][0], staggered["input_mask"][1])
+        )
         self.assertGreaterEqual(int(staggered["input_mask"].sum(dim=-1).min()), 32)
 
     def test_two_draws_get_different_group_ids(self):

@@ -12,7 +12,9 @@ from tfsformer.trainer import TFSpecFormerPreTrainer
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Pretrain TFSpecFormer")
-    parser.add_argument("--size", default="base", choices=["tiny", "small", "base", "large"])
+    parser.add_argument(
+        "--size", default="base", choices=["tiny", "small", "base", "large"]
+    )
     parser.add_argument("--data-path", default=None)
     parser.add_argument("--checkpoint-path", default=None)
     parser.add_argument("--resume", default=None)

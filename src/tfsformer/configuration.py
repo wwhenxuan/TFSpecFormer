@@ -17,9 +17,21 @@ MASK_MODES = ("future", "random", "group", "staggered")
 # Width and depth presets used to check scaling. d_model == num_heads * d_kv.
 MODEL_SIZES = {
     "tiny": {"d_model": 256, "d_kv": 64, "d_ff": 768, "num_layers": 4, "num_heads": 4},
-    "small": {"d_model": 384, "d_kv": 64, "d_ff": 1152, "num_layers": 6, "num_heads": 6},
+    "small": {
+        "d_model": 384,
+        "d_kv": 64,
+        "d_ff": 1152,
+        "num_layers": 6,
+        "num_heads": 6,
+    },
     "base": {"d_model": 512, "d_kv": 64, "d_ff": 1536, "num_layers": 6, "num_heads": 8},
-    "large": {"d_model": 768, "d_kv": 64, "d_ff": 3072, "num_layers": 12, "num_heads": 12},
+    "large": {
+        "d_model": 768,
+        "d_kv": 64,
+        "d_ff": 3072,
+        "num_layers": 12,
+        "num_heads": 12,
+    },
 }
 
 
@@ -50,7 +62,9 @@ class TFSpecFormerForecastingConfig(object):
         )
         self.use_arcsinh = use_arcsinh
         self.min_past = min_past
-        self.time_encoding_scale = context_length if time_encoding_scale is None else time_encoding_scale
+        self.time_encoding_scale = (
+            context_length if time_encoding_scale is None else time_encoding_scale
+        )
 
     def to_dict(self) -> Dict:
         return {
@@ -131,12 +145,16 @@ class TFSpecFormerConfig(PretrainedConfig):
         elif forecasting_config is None:
             forecasting_config = TFSpecFormerForecastingConfig().to_dict()
         else:
-            forecasting_config = TFSpecFormerForecastingConfig(**forecasting_config).to_dict()
+            forecasting_config = TFSpecFormerForecastingConfig(
+                **forecasting_config
+            ).to_dict()
         self.forecasting_config = forecasting_config
 
         attn_implementation = attn_implementation or "sdpa"
         if attn_implementation not in ("eager", "sdpa"):
-            raise ValueError(f"attn_implementation {attn_implementation} is not supported.")
+            raise ValueError(
+                f"attn_implementation {attn_implementation} is not supported."
+            )
 
         kwargs.pop("is_encoder_decoder", None)
         kwargs.pop("eos_token_id", None)
@@ -150,7 +168,9 @@ class TFSpecFormerConfig(PretrainedConfig):
     @classmethod
     def from_size(cls, size: str, **kwargs) -> "TFSpecFormerConfig":
         if size not in MODEL_SIZES:
-            raise ValueError(f"Unknown size {size!r}. Expected one of {list(MODEL_SIZES)}.")
+            raise ValueError(
+                f"Unknown size {size!r}. Expected one of {list(MODEL_SIZES)}."
+            )
         params = dict(MODEL_SIZES[size])
         params.update(kwargs)
         return cls(**params)
@@ -217,13 +237,20 @@ class TFSpecFormerTrainingConfig(object):
         self.train_data_class = "all"
         self.eval_context_lengths = [128, 192, 256, 336, 512]
 
-        probs = dict(mask_mode_probs or {"future": 0.4, "random": 0.2, "group": 0.2, "staggered": 0.2})
+        probs = dict(
+            mask_mode_probs
+            or {"future": 0.4, "random": 0.2, "group": 0.2, "staggered": 0.2}
+        )
         missing = set(MASK_MODES) - set(probs)
         unknown = set(probs) - set(MASK_MODES)
         if missing or unknown:
-            raise ValueError(f"mask_mode_probs must contain exactly {MASK_MODES}, found {sorted(probs)}.")
+            raise ValueError(
+                f"mask_mode_probs must contain exactly {MASK_MODES}, found {sorted(probs)}."
+            )
         if any(value < 0 for value in probs.values()) or sum(probs.values()) <= 0:
-            raise ValueError("mask_mode_probs values must be non-negative and sum to a positive number.")
+            raise ValueError(
+                "mask_mode_probs values must be non-negative and sum to a positive number."
+            )
         self.mask_mode_probs = probs
         self.mask_ratio = mask_ratio
         self.min_span_patches = min_span_patches

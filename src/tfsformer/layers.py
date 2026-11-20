@@ -73,7 +73,7 @@ class MemoryAttention(nn.Module):
         self.gate = config.attn_output_gate
         self.qk_norm = config.qk_norm
         self.use_rope = use_rope
-        self.scale = self.head_dim ** -0.5
+        self.scale = self.head_dim**-0.5
         self.config = config
 
         if self.gate == "headwise":
@@ -99,7 +99,12 @@ class MemoryAttention(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor | None]:
         batch, seq_len, _ = hidden_states.shape
         query = self.q(hidden_states)
-        key = rearrange(self.k(hidden_states), "b s (h d) -> b h s d", h=self.num_heads, d=self.head_dim)
+        key = rearrange(
+            self.k(hidden_states),
+            "b s (h d) -> b h s d",
+            h=self.num_heads,
+            d=self.head_dim,
+        )
         gate = None
         if self.gate == "headwise":
             query = query.view(batch, seq_len, self.num_heads, self.head_dim + 1)
@@ -112,7 +117,9 @@ class MemoryAttention(nn.Module):
             query = query.permute(0, 2, 1, 3)
             gate = gate.permute(0, 2, 1, 3)
         else:
-            query = rearrange(query, "b s (h d) -> b h s d", h=self.num_heads, d=self.head_dim)
+            query = rearrange(
+                query, "b s (h d) -> b h s d", h=self.num_heads, d=self.head_dim
+            )
 
         memory = self.m_norm(self.memory).to(dtype=key.dtype)
         value = key + memory[None, :, None, :]
@@ -164,13 +171,19 @@ class MemoryAttention(nn.Module):
         eager = output_attentions or implementation == "eager"
         attended, weights = self._attend(query, key, value, mask, eager=eager)
         # A fully padded group has no legal keys. Zero that row instead of letting NaN spread.
-        attended = torch.where(torch.isfinite(attended), attended, torch.zeros_like(attended))
+        attended = torch.where(
+            torch.isfinite(attended), attended, torch.zeros_like(attended)
+        )
         if weights is not None:
-            weights = torch.where(torch.isfinite(weights), weights, torch.zeros_like(weights))
+            weights = torch.where(
+                torch.isfinite(weights), weights, torch.zeros_like(weights)
+            )
         if gate is not None:
             attended = attended * torch.sigmoid(gate)
         hidden = self.o(rearrange(attended, "b h s d -> b s (h d)"))
-        return AttentionOutput(hidden_states=hidden, attn_weights=weights if output_attentions else None)
+        return AttentionOutput(
+            hidden_states=hidden, attn_weights=weights if output_attentions else None
+        )
 
 
 class TimeSelfAttention(nn.Module):
@@ -220,7 +233,9 @@ class GroupSelfAttention(nn.Module):
         )
         hidden_states = hidden_states + self.dropout(attended.hidden_states)
         hidden_states = rearrange(hidden_states, "time batch dim -> batch time dim")
-        return AttentionOutput(hidden_states=hidden_states, attn_weights=attended.attn_weights)
+        return AttentionOutput(
+            hidden_states=hidden_states, attn_weights=attended.attn_weights
+        )
 
 
 class FeedForward(nn.Module):
@@ -240,7 +255,14 @@ class FeedForward(nn.Module):
 class ResidualBlock(nn.Module):
     """MLP with a linear skip, used to embed patches and to emit quantiles."""
 
-    def __init__(self, in_dim: int, h_dim: int, out_dim: int, dropout_p: float, act_fn_name: str = "gelu") -> None:
+    def __init__(
+        self,
+        in_dim: int,
+        h_dim: int,
+        out_dim: int,
+        dropout_p: float,
+        act_fn_name: str = "gelu",
+    ) -> None:
         super().__init__()
         self.hidden_layer = nn.Linear(in_dim, h_dim)
         self.act = ACT2FN[act_fn_name]

@@ -58,7 +58,9 @@ class TFSpecFormerEncoderBlock(nn.Module):
 class TFSpecFormerEncoder(nn.Module):
     def __init__(self, config: TFSpecFormerConfig) -> None:
         super().__init__()
-        self.blocks = nn.ModuleList(TFSpecFormerEncoderBlock(config) for _ in range(config.num_layers))
+        self.blocks = nn.ModuleList(
+            TFSpecFormerEncoderBlock(config) for _ in range(config.num_layers)
+        )
         self.final_norm = RMSNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
@@ -69,14 +71,18 @@ class TFSpecFormerEncoder(nn.Module):
         return (1.0 - mask) * torch.finfo(dtype).min
 
     @staticmethod
-    def group_mask(group_ids: torch.Tensor, attention_mask: torch.Tensor, dtype: torch.dtype) -> torch.Tensor:
+    def group_mask(
+        group_ids: torch.Tensor, attention_mask: torch.Tensor, dtype: torch.dtype
+    ) -> torch.Tensor:
         """
         Additive mask of shape ``(seq, 1, batch, batch)``.
 
         A query variate may read a key variate at the same patch only when they share
         a ``group_id`` and the key patch is valid.
         """
-        same_group = (group_ids[:, None] == group_ids[None, :]).to(dtype=attention_mask.dtype)
+        same_group = (group_ids[:, None] == group_ids[None, :]).to(
+            dtype=attention_mask.dtype
+        )
         allowed = torch.einsum("qb,bt->qbt", same_group, attention_mask)
         allowed = rearrange(allowed, "q b t -> t 1 q b").to(dtype=dtype)
         return (1.0 - allowed) * torch.finfo(dtype).min
@@ -92,7 +98,9 @@ class TFSpecFormerEncoder(nn.Module):
         _, seq_len, _ = inputs_embeds.shape
         position_ids = torch.arange(seq_len, device=inputs_embeds.device).unsqueeze(0)
         time_mask = self.time_mask(attention_mask, inputs_embeds.dtype)
-        group_time_mask = self.group_mask(group_ids, attention_mask.to(dtype=inputs_embeds.dtype), inputs_embeds.dtype)
+        group_time_mask = self.group_mask(
+            group_ids, attention_mask.to(dtype=inputs_embeds.dtype), inputs_embeds.dtype
+        )
 
         time_weights = []
         group_weights = []
@@ -159,7 +167,9 @@ class TFSpecFormerModel(PreTrainedModel):
     def _init_weights(self, module) -> None:
         factor = self.config.initializer_factor
         if isinstance(module, nn.Linear):
-            nn.init.normal_(module.weight, mean=0.0, std=factor * (module.weight.shape[-1] ** -0.5))
+            nn.init.normal_(
+                module.weight, mean=0.0, std=factor * (module.weight.shape[-1] ** -0.5)
+            )
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
         elif isinstance(module, RMSNorm):
@@ -172,8 +182,12 @@ class TFSpecFormerModel(PreTrainedModel):
     ) -> torch.Tensor:
         """Pinball loss on hidden steps only: mean over time, sum over quantiles, mean over series."""
         target = torch.nan_to_num(target, nan=0.0).unsqueeze(1).to(dtype=pred.dtype)
-        quantiles = self.quantiles.to(device=pred.device, dtype=pred.dtype).view(1, -1, 1)
-        pinball = 2 * torch.abs((target - pred) * ((target <= pred).to(pred.dtype) - quantiles))
+        quantiles = self.quantiles.to(device=pred.device, dtype=pred.dtype).view(
+            1, -1, 1
+        )
+        pinball = 2 * torch.abs(
+            (target - pred) * ((target <= pred).to(pred.dtype) - quantiles)
+        )
         weights = loss_mask.to(dtype=pred.dtype)
         denom = weights.sum(dim=-1).clamp(min=1).unsqueeze(1)
         per_series = ((pinball * weights.unsqueeze(1)).sum(dim=-1) / denom).sum(dim=-1)
@@ -190,7 +204,9 @@ class TFSpecFormerModel(PreTrainedModel):
         output_attentions: bool = False,
     ) -> TFSpecFormerOutput:
         if values.ndim != 2:
-            raise ValueError(f"values must have shape (batch, time), found {tuple(values.shape)}.")
+            raise ValueError(
+                f"values must have shape (batch, time), found {tuple(values.shape)}."
+            )
         values = values.to(device=self.device, dtype=torch.float32)
         batch, length = values.shape
         observed = torch.isfinite(values)
@@ -204,7 +220,10 @@ class TFSpecFormerModel(PreTrainedModel):
             visible = observed & input_mask.to(device=self.device).bool()
         tokens = content_mask(observed)
 
-        max_len = self.forecasting.context_length + self.forecasting.max_output_patches * self.patch_size
+        max_len = (
+            self.forecasting.context_length
+            + self.forecasting.max_output_patches * self.patch_size
+        )
         if length > max_len:
             values = values[:, -max_len:]
             observed = observed[:, -max_len:]
@@ -219,28 +238,40 @@ class TFSpecFormerModel(PreTrainedModel):
         tokens = pad_left(tokens, pad, False)
         length = values.shape[-1]
 
-        shown, loc_scale = self.instance_norm(values.masked_fill(~visible, float("nan")))
-        target, _ = self.instance_norm(values.masked_fill(~observed, float("nan")), loc_scale)
+        shown, loc_scale = self.instance_norm(
+            values.masked_fill(~visible, float("nan"))
+        )
+        target, _ = self.instance_norm(
+            values.masked_fill(~observed, float("nan")), loc_scale
+        )
         shown = torch.nan_to_num(shown, nan=0.0)
         presence = visible.float()
 
         num_patches = length // self.patch_size
         patched_value = shown.unfold(-1, self.patch_size, self.patch_size)
         patched_presence = presence.unfold(-1, self.patch_size, self.patch_size)
-        attention_mask = tokens.float().unfold(-1, self.patch_size, self.patch_size).sum(-1) > 0
+        attention_mask = (
+            tokens.float().unfold(-1, self.patch_size, self.patch_size).sum(-1) > 0
+        )
 
         time_index = torch.arange(length, device=values.device, dtype=torch.float32)
         time_index = time_index / float(self.forecasting.time_encoding_scale)
-        time_enc = time_index.view(1, num_patches, self.patch_size).expand(batch, -1, -1)
+        time_enc = time_index.view(1, num_patches, self.patch_size).expand(
+            batch, -1, -1
+        )
         embed_in = torch.cat((time_enc, patched_value, patched_presence), dim=-1)
-        embed_in = embed_in.to(dtype=self.input_patch_embedding.hidden_layer.weight.dtype)
+        embed_in = embed_in.to(
+            dtype=self.input_patch_embedding.hidden_layer.weight.dtype
+        )
 
         if group_ids is None:
             group_ids = torch.arange(batch, device=values.device)
         else:
             group_ids = group_ids.to(device=values.device, dtype=torch.long)
             if group_ids.shape != (batch,):
-                raise ValueError(f"group_ids must have shape ({batch},), found {tuple(group_ids.shape)}.")
+                raise ValueError(
+                    f"group_ids must have shape ({batch},), found {tuple(group_ids.shape)}."
+                )
 
         encoded = self.encoder(
             self.input_patch_embedding(embed_in),
@@ -257,11 +288,17 @@ class TFSpecFormerModel(PreTrainedModel):
         )
 
         loss_mask = (observed & ~visible).float()
-        loss = self._compute_loss(quantile_preds, target, loss_mask) if bool(loss_mask.any()) else None
+        loss = (
+            self._compute_loss(quantile_preds, target, loss_mask)
+            if bool(loss_mask.any())
+            else None
+        )
 
         loc, scale = loc_scale
         with torch.no_grad():
-            restored = self.instance_norm.inverse(quantile_preds.detach(), (loc.unsqueeze(1), scale.unsqueeze(1)))
+            restored = self.instance_norm.inverse(
+                quantile_preds.detach(), (loc.unsqueeze(1), scale.unsqueeze(1))
+            )
         if pad:
             restored = restored[..., pad:]
         return TFSpecFormerOutput(
@@ -280,17 +317,23 @@ class TFSpecFormerModel(PreTrainedModel):
     ) -> torch.Tensor:
         """Append mask steps after ``context`` and return quantiles of shape ``(batch, Q, prediction_length)``."""
         if context.ndim != 2:
-            raise ValueError(f"context must have shape (batch, time), found {tuple(context.shape)}.")
+            raise ValueError(
+                f"context must have shape (batch, time), found {tuple(context.shape)}."
+            )
         if prediction_length < 1:
             raise ValueError("prediction_length must be positive.")
         max_horizon = self.forecasting.max_output_patches * self.patch_size
         if prediction_length > max_horizon:
-            raise ValueError(f"prediction_length {prediction_length} exceeds the maximum horizon {max_horizon}.")
+            raise ValueError(
+                f"prediction_length {prediction_length} exceeds the maximum horizon {max_horizon}."
+            )
 
         context = context.to(dtype=torch.float32)
         if context.shape[-1] > self.forecasting.context_length:
             context = context[..., -self.forecasting.context_length :]
-        horizon = ((prediction_length + self.patch_size - 1) // self.patch_size) * self.patch_size
+        horizon = (
+            (prediction_length + self.patch_size - 1) // self.patch_size
+        ) * self.patch_size
         future = torch.full(
             (context.shape[0], horizon),
             float("nan"),
@@ -299,7 +342,11 @@ class TFSpecFormerModel(PreTrainedModel):
         )
         history = context.shape[-1]
         values = torch.cat((context, future), dim=-1)
-        input_mask = torch.zeros(values.shape, dtype=torch.float32, device=values.device)
+        input_mask = torch.zeros(
+            values.shape, dtype=torch.float32, device=values.device
+        )
         input_mask[:, :history] = torch.isfinite(context).float()
-        preds = self.forward(values, input_mask=input_mask, group_ids=group_ids).quantile_preds
+        preds = self.forward(
+            values, input_mask=input_mask, group_ids=group_ids
+        ).quantile_preds
         return preds[:, :, history : history + prediction_length]

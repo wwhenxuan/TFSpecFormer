@@ -24,7 +24,9 @@ class Patch(nn.Module):
         length = x.shape[-1]
         if length % self.patch_size != 0:
             pad = self.patch_size - (length % self.patch_size)
-            filler = torch.full((*x.shape[:-1], pad), torch.nan, dtype=x.dtype, device=x.device)
+            filler = torch.full(
+                (*x.shape[:-1], pad), torch.nan, dtype=x.dtype, device=x.device
+            )
             x = torch.cat((filler, x), dim=-1)
         return x.unfold(dimension=-1, size=self.patch_size, step=self.patch_stride)
 
@@ -46,7 +48,9 @@ class InstanceNorm(nn.Module):
         x = x.float()
         if loc_scale is None:
             loc = torch.nan_to_num(torch.nanmean(x, dim=-1, keepdim=True), nan=0.0)
-            scale = torch.nan_to_num((x - loc).square().nanmean(dim=-1, keepdim=True).sqrt(), nan=1.0)
+            scale = torch.nan_to_num(
+                (x - loc).square().nanmean(dim=-1, keepdim=True).sqrt(), nan=1.0
+            )
             scale = torch.where(scale == 0, torch.full_like(scale, self.eps), scale)
         else:
             loc, scale = loc_scale
@@ -55,7 +59,9 @@ class InstanceNorm(nn.Module):
             scaled = torch.arcsinh(scaled)
         return scaled.to(orig_dtype), (loc, scale)
 
-    def inverse(self, x: torch.Tensor, loc_scale: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+    def inverse(
+        self, x: torch.Tensor, loc_scale: tuple[torch.Tensor, torch.Tensor]
+    ) -> torch.Tensor:
         orig_dtype = x.dtype
         x = x.float()
         loc, scale = loc_scale
@@ -67,7 +73,9 @@ class InstanceNorm(nn.Module):
 def pad_left(tensor: torch.Tensor, pad: int, value) -> torch.Tensor:
     if pad <= 0:
         return tensor
-    filler = torch.full((*tensor.shape[:-1], pad), value, dtype=tensor.dtype, device=tensor.device)
+    filler = torch.full(
+        (*tensor.shape[:-1], pad), value, dtype=tensor.dtype, device=tensor.device
+    )
     return torch.cat((filler, tensor), dim=-1)
 
 
@@ -78,7 +86,12 @@ def left_pad_and_cat(tensors: Sequence[torch.Tensor], fill_value) -> torch.Tenso
     for tensor in tensors:
         gap = max_len - tensor.shape[-1]
         if gap:
-            filler = torch.full((*tensor.shape[:-1], gap), fill_value, dtype=tensor.dtype, device=tensor.device)
+            filler = torch.full(
+                (*tensor.shape[:-1], gap),
+                fill_value,
+                dtype=tensor.dtype,
+                device=tensor.device,
+            )
             tensor = torch.cat((filler, tensor), dim=-1)
         padded.append(tensor)
     return torch.cat(padded, dim=0)
@@ -106,7 +119,9 @@ def as_series(target) -> torch.Tensor:
     if series.ndim == 1:
         series = series.unsqueeze(0)
     if series.ndim != 2:
-        raise ValueError(f"target must have shape (T,) or (C, T), found {tuple(series.shape)}.")
+        raise ValueError(
+            f"target must have shape (T,) or (C, T), found {tuple(series.shape)}."
+        )
     return series
 
 
@@ -184,13 +199,17 @@ def sample_patch_mask(
     max_span = max(min_span, min(max_span_patches, n_hidden))
 
     if mode == "group":
-        span = _place_spans(num_patches, n_hidden, min_span, max_span, max_mask_spans, rng)
+        span = _place_spans(
+            num_patches, n_hidden, min_span, max_span, max_mask_spans, rng
+        )
         hidden[:] = span
         return hidden
 
     if mode == "random":
         for channel in range(num_channels):
-            hidden[channel] = _place_spans(num_patches, n_hidden, min_span, max_span, max_mask_spans, rng)
+            hidden[channel] = _place_spans(
+                num_patches, n_hidden, min_span, max_span, max_mask_spans, rng
+            )
         return hidden
 
     base = _place_spans(num_patches, n_hidden, min_span, max_span, max_mask_spans, rng)
@@ -225,7 +244,9 @@ def hidden_runs(row: np.ndarray) -> list[int]:
 
 def count_parameters(model: nn.Module) -> tuple[int, int]:
     total = sum(param.numel() for param in model.parameters())
-    trainable = sum(param.numel() for param in model.parameters() if param.requires_grad)
+    trainable = sum(
+        param.numel() for param in model.parameters() if param.requires_grad
+    )
     return total, trainable
 
 
@@ -256,8 +277,21 @@ def plot_confidence_prediction(
             median = list(quantiles).index(0.5)
         else:
             median = prediction.shape[0] // 2
-        axis.plot(fut_time, prediction[median], color="darkorange", linestyle="--", label="median")
-        axis.fill_between(fut_time, prediction[0], prediction[-1], color="darkorange", alpha=0.2, label="interval")
+        axis.plot(
+            fut_time,
+            prediction[median],
+            color="darkorange",
+            linestyle="--",
+            label="median",
+        )
+        axis.fill_between(
+            fut_time,
+            prediction[0],
+            prediction[-1],
+            color="darkorange",
+            alpha=0.2,
+            label="interval",
+        )
     axis.grid(alpha=0.2)
     axis.legend(loc="upper left", fontsize=8)
     if created:
@@ -272,7 +306,9 @@ def plot_forecast_grid(
     count = max(len(rows), 1)
     fig, axes = plt.subplots(count, 1, figsize=(8, 2.4 * count), dpi=100, squeeze=False)
     for axis, row in zip(axes[:, 0], rows):
-        plot_confidence_prediction(row[0], row[1], row[2], quantiles=quantiles, axis=axis)
+        plot_confidence_prediction(
+            row[0], row[1], row[2], quantiles=quantiles, axis=axis
+        )
     fig.tight_layout()
     return fig
 
